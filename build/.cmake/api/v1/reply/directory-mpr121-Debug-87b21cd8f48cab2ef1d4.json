@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "mpr121",
+		"source" : "C:/Users/joelm/Documents/Pico-v1.5.0/libraries/pico-mpr121/lib"
+	}
+}
