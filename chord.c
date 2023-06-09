@@ -15,7 +15,9 @@
 #define MPR121_I2C_FREQ 400000
 
 #define MPR121_TOUCH_THRESHOLD 16
-#define MPR121_RELEASE_THRESHOLD 10
+#define MPR121_RELEASE_THRESHOLD 10 
+#define NOTE_DURATION 100
+
 //Chordnames
 enum ChordQuality {
     MAJOR   = 0,
@@ -48,22 +50,22 @@ enum Notes {
 
 uint8_t ChordButtonPins [] = {16, 17, 18, 19, 20, 21, 22, 26, 27, 28};
 uint8_t NoteButtonPins [] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-uint8_t MIDINotes [] = {36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 33, 35};
+uint8_t MIDINotes [] = {36, 37, 38, 39, 40, 41, 42, 30, 31, 32, 33, 35};
 
-//Formulae for how to form chords
+//Chord voicings
 //Number of semitones from the root note
-int8_t chordFormulas[10][12] = 
+int8_t chordVoicings[10][12] = 
 {
-    {0, 7, 12, 16, 19, 24, 28, 31, 36, 40, 43, 48}, //MAJ
+    {0, 7, 12, 16, 19, 24, 28, 31, 36, 40, 43, 48}, //MAJ 
     {0, 7, 12, 15, 19, 24, 27, 31, 36, 39, 43, 48}, //MIN
-    {0, 7, 12, 16, 19, 23, 24, 28, 31, 35, 36, 43}, //MAJ7
-    {0, 7, 12, 15, 19, 22, 24, 27, 31, 34, 36, 43}, //MIN7
-    {0, 7, 12, 16, 19, 22, 24, 28, 31, 34, 36, 43}, //DOM7
-    {0, 7, 12, 19, 23, 24, 26, 28, 35, 36, 38, 43}, //MAJ9
-    {0, 7, 12, 19, 22, 24, 26, 28, 34, 36, 38, 43}, //MIN9
-    {0, 7, 12, 19, 22, 24, 26, 27, 34, 38, 39, 43}, //DOM9
-    {0, 6, 12, 15, 18, 24, 27, 30, 36, 39, 43, 48}, //DIM
-    {0, 8, 12, 16, 19, 24, 28, 32, 36, 40, 44, 48}  //AUG
+    {0, 7, 12, 16, 19, 23, 24, 31, 35, 36, 40, 47}, //MAJ7
+    {0, 7, 12, 15, 19, 22, 24, 27, 34, 36, 39, 46}, //MIN7
+    {0, 7, 12, 16, 19, 22, 24, 28, 34, 36, 40, 46}, //DOM7
+    {0, 7, 12, 16, 23, 26, 28, 35, 36, 38, 47, 50}, //MAJ9
+    {0, 7, 12, 15, 22, 26, 27, 34, 38, 39, 46, 50}, //MIN9
+    {0, 7, 12, 16, 22, 26, 28, 34, 38, 40, 46, 50}, //DOM9
+    {0, 6, 12, 15, 18, 24, 27, 30, 36, 39, 42, 48}, //DIM
+    {0, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48}  //AUG
 };
 
 //function declarations
@@ -71,7 +73,7 @@ void gpio_initialise(void);
 void mpr121_initialise(void);
 void midi_task(void);
 void chord_select_task(void);                     
-uint8_t getNote(int root, int string);
+uint8_t getNote(int root, int string, int chordQuality);
 
 static uint8_t rootNote;
 static enum ChordQuality chordQuality;
@@ -81,7 +83,6 @@ static uint16_t previousTouch = 0x0000;
 static uint16_t currentTouch = 0x0000; 
 static uint32_t noteTimers [12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8_t previousNote [12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static const uint16_t noteDuration = 250;
 
 int main() 
 {
@@ -149,7 +150,7 @@ void midi_task()
         {
             if (((previousTouch >> electrode) & 1) == 0 && ((currentTouch >> electrode) & 1) == 1)
             {
-                note = getNote(rootNote, electrode);
+                note = getNote(rootNote, electrode, chordQuality);
                 uint8_t note_on[3] = { 0x90 | channel, note, 127 };
                 tud_midi_stream_write(cable_num, note_on, 3);
                 noteTimers[electrode] = board_millis();
@@ -167,7 +168,7 @@ void midi_task()
     //Turn off notes after duration has elasped
     for (int i = 0; i < 12; i++)
     {
-        if ((board_millis() - noteTimers[i]) > noteDuration && (noteTimers[i] != 0))
+        if ((board_millis() - noteTimers[i]) > NOTE_DURATION && (noteTimers[i] != 0))
             {
                 uint8_t note_off[3] = { 0x80 | channel, previousNote[i], 0};
                 tud_midi_stream_write(cable_num, note_off, 3);
@@ -179,10 +180,10 @@ void midi_task()
 }
 
 //Returns the MIDI Note number to play
-uint8_t getNote(int root, int string)
+uint8_t getNote(int root, int string, int chordQuality)
 {
     uint8_t note;
-    note = root + chordFormulas[chordQuality][string];
+    note = root + chordVoicings[chordQuality][string] + 12;
     return note;
 }
 
