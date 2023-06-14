@@ -4,76 +4,9 @@
 #include "pico/binary_info.h"
 #include "hardware/i2c.h"
 #include "mpr121.h"
-
+#include "chord.h"
 #include "bsp/board.h"
 #include "tusb.h"
-
-#define I2C_PORT i2c1
-#define I2C_SDA 14
-#define I2C_SCL 15
-#define MPR121_I2C_ADDR 0x5A
-#define MPR121_I2C_FREQ 400000
-
-#define MPR121_TOUCH_THRESHOLD 16
-#define MPR121_RELEASE_THRESHOLD 10 
-#define NOTE_DURATION 100
-
-//Chordnames
-enum ChordQuality {
-    MAJOR   = 0,
-    MINOR   = 1,
-    MAJOR7  = 2,
-    MINOR7  = 3,
-    DOM7    = 4,
-    MAJOR9  = 5,
-    MINOR9  = 6,
-    DOM9    = 7,
-    DIM     = 8,
-    AUG     = 9
-};
-
-//Note numbers are the MIDI note numbers starting from 36 for C1
-enum Notes {
-    C   = 0,
-    Db  = 1,
-    D   = 2,
-    Eb  = 3,
-    E   = 4,
-    F   = 5,
-    Gb  = 6,
-    G   = 7,
-    Ab  = 8,
-    A   = 9,
-    Bb  = 10, 
-    B   = 11
-};
-
-uint8_t ChordButtonPins [] = {16, 17, 18, 19, 20, 21, 22, 26, 27, 28};
-uint8_t NoteButtonPins [] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-uint8_t MIDINotes [] = {36, 37, 38, 39, 40, 41, 42, 30, 31, 32, 33, 35};
-
-//Chord voicings
-//Number of semitones from the root note
-int8_t chordVoicings[10][12] = 
-{
-    {0, 7, 12, 16, 19, 24, 28, 31, 36, 40, 43, 48}, //MAJ 
-    {0, 7, 12, 15, 19, 24, 27, 31, 36, 39, 43, 48}, //MIN
-    {0, 7, 12, 16, 19, 23, 24, 31, 35, 36, 40, 47}, //MAJ7
-    {0, 7, 12, 15, 19, 22, 24, 27, 34, 36, 39, 46}, //MIN7
-    {0, 7, 12, 16, 19, 22, 24, 28, 34, 36, 40, 46}, //DOM7
-    {0, 7, 12, 16, 23, 26, 28, 35, 36, 38, 47, 50}, //MAJ9
-    {0, 7, 12, 15, 22, 26, 27, 34, 38, 39, 46, 50}, //MIN9
-    {0, 7, 12, 16, 22, 26, 28, 34, 38, 40, 46, 50}, //DOM9
-    {0, 6, 12, 15, 18, 24, 27, 30, 36, 39, 42, 48}, //DIM
-    {0, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48}  //AUG
-};
-
-//function declarations
-void gpio_initialise(void);
-void mpr121_initialise(void);
-void midi_task(void);
-void chord_select_task(void);                     
-uint8_t getNote(int root, int string, int chordQuality);
 
 static uint8_t rootNote;
 static enum ChordQuality chordQuality;
@@ -102,7 +35,7 @@ int main()
                           MPR121_RELEASE_THRESHOLD, &mpr121);
 
 
-    chordQuality = MAJOR;
+    chordQuality = MAJ;
     rootNote = MIDINotes[0];
 
     while (1) 
@@ -113,29 +46,11 @@ int main()
     }
 }
 
-//Detect chord quality from pushbuttons
-//To implement faster algorithm
-void chord_select_task()
-{   
-    for (int i = 0; i < 10; i++)
-    {
-        if (gpio_get(ChordButtonPins[i]) != 0) 
-        {
-            chordQuality = i;
-        }
-    }
-    for (int i = 0; i < 12; i++)
-    {
-        if (gpio_get(NoteButtonPins[i]) != 0)
-        {
-            rootNote = MIDINotes[i];
-        }
-    }
-}
-
+//Reads MPR121 and sends midi messages 
+//Note ON only once per touch
+//Note OFF after NOTE_DURATION has elapsed 
 void midi_task()
 {
-         
     uint8_t const cable_num = 0;
     uint8_t const channel = 0;
     uint8_t note;
@@ -187,53 +102,85 @@ uint8_t getNote(int root, int string, int chordQuality)
     return note;
 }
 
+//Scan keyboard matrix and identify the chord being selected
+//Bits 0 - 21 are the readings of the 22 keyswitches. Other bits are unused.
+void chord_select_task()
+{  
+    uint32_t keyState = 0x00000000;
+    uint32_t noteKeypress = 0x00000000;
+    uint32_t qualityKeypress = 0x00000000;
+    uint8_t columnState;
+
+    for (int i = 0; i < 5; i++)
+    {
+        columnState = 0x00;
+        gpio_put(columnPins[i], 1);
+        for (int j = 0; j < 5; j++)
+        {
+            columnState = columnState | (gpio_get(rowPins[j]) << j);
+        }
+        keyState = (keyState << (i * 5)) | columnState;
+    }
+
+    noteKeypress = keyState & 0x1ff8c00;
+    qualityKeypress = keyState & 0x000073e3;
+    switch (noteKeypress)
+    {
+        case KEY_C  : rootNote = C;
+        case KEY_Cs : rootNote = Cs;
+        case KEY_D  : rootNote = D;
+        case KEY_Ds : rootNote = Ds; 
+        case KEY_E  : rootNote = E;
+        case KEY_F  : rootNote = F;
+        case KEY_Fs : rootNote = Fs;
+        case KEY_G  : rootNote = G;
+        case KEY_Gs : rootNote = Gs;
+        case KEY_A  : rootNote = A;
+        case KEY_As : rootNote = As;
+        case KEY_B  : rootNote = B;
+        default     : rootNote = rootNote;  //Do not change note if >1 note key pressed simultaneously
+    }
+
+    switch (qualityKeypress)
+    {
+        case KEY_MAJ  : chordQuality = MAJ;
+        case KEY_MIN  : chordQuality = MIN;
+        case KEY_MAJ7 : chordQuality = MAJ7;
+        case KEY_MIN7 : chordQuality = MIN7;
+        case KEY_MAJ9 : chordQuality = MAJ9;
+        case KEY_MIN9 : chordQuality = MIN9;
+        case KEY_DOM7 : chordQuality = DOM7;
+        case KEY_DOM9 : chordQuality = DOM9;
+        case KEY_DIM  : chordQuality = DIM;
+        case KEY_AUG  : chordQuality = AUG;
+        default       : chordQuality = chordQuality;    //Do not change quality if >1 quality key pressed simultaneously
+    }
+    
+}
+
 void gpio_initialise()
 {
-    gpio_init(NoteButtonPins[0]);
-    gpio_init(NoteButtonPins[1]);
-    gpio_init(NoteButtonPins[2]);
-    gpio_init(NoteButtonPins[3]);
-    gpio_init(NoteButtonPins[4]);
-    gpio_init(NoteButtonPins[5]);
-    gpio_init(NoteButtonPins[6]);
-    gpio_init(NoteButtonPins[7]);
-    gpio_init(NoteButtonPins[8]);
-    gpio_init(NoteButtonPins[9]);
-    gpio_init(NoteButtonPins[10]);
-    gpio_init(NoteButtonPins[11]);
-    gpio_init(ChordButtonPins[0]);
-    gpio_init(ChordButtonPins[1]);
-    gpio_init(ChordButtonPins[2]);
-    gpio_init(ChordButtonPins[3]);
-    gpio_init(ChordButtonPins[4]);
-    gpio_init(ChordButtonPins[5]);
-    gpio_init(ChordButtonPins[6]);
-    gpio_init(ChordButtonPins[7]);
-    gpio_init(ChordButtonPins[8]);
-    gpio_init(ChordButtonPins[9]);
+    gpio_init(rowPins[0]);
+    gpio_init(rowPins[1]);
+    gpio_init(rowPins[2]);
+    gpio_init(rowPins[3]);
+    gpio_init(rowPins[4]);
+    gpio_init(columnPins[0]);
+    gpio_init(columnPins[1]);
+    gpio_init(columnPins[2]);
+    gpio_init(columnPins[3]);
+    gpio_init(columnPins[4]);
 
-    gpio_set_dir(NoteButtonPins[0], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[1], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[2], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[3], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[4], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[5], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[6], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[7], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[8], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[9], GPIO_IN);
-    gpio_set_dir(NoteButtonPins[10],GPIO_IN);
-    gpio_set_dir(NoteButtonPins[11], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[0], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[1], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[2], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[3], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[4], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[5], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[6], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[7], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[8], GPIO_IN);
-    gpio_set_dir(ChordButtonPins[9], GPIO_IN);
+    gpio_set_dir(rowPins[0], GPIO_IN);
+    gpio_set_dir(rowPins[1], GPIO_IN);
+    gpio_set_dir(rowPins[2], GPIO_IN);
+    gpio_set_dir(rowPins[3], GPIO_IN);
+    gpio_set_dir(rowPins[4], GPIO_IN);
+    gpio_set_dir(columnPins[0], GPIO_OUT);
+    gpio_set_dir(columnPins[1], GPIO_OUT);
+    gpio_set_dir(columnPins[2], GPIO_OUT);
+    gpio_set_dir(columnPins[3], GPIO_OUT);
+    gpio_set_dir(columnPins[4], GPIO_OUT);
 }
 
 //--------------------------------------------------------------------+
