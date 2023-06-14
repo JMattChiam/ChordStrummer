@@ -111,6 +111,9 @@ void chord_select_task()
     uint32_t qualityKeypress = 0x00000000;
     uint8_t columnState;
 
+    //Turn on columns in order and read the rows
+    //Saved into keyState variable
+    //See chord.h for positions of each keyswitch
     for (int i = 0; i < 5; i++)
     {
         columnState = 0x00;
@@ -122,8 +125,8 @@ void chord_select_task()
         keyState = (keyState << (i * 5)) | columnState;
     }
 
-    noteKeypress = keyState & 0x1ff8c00;
-    qualityKeypress = keyState & 0x000073e3;
+    noteKeypress = keyState & KEYS_NOTES_MASK;
+    qualityKeypress = keyState & KEYS_QUALITY_MASK;
     switch (noteKeypress)
     {
         case KEY_C  : rootNote = C;

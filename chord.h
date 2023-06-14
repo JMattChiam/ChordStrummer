@@ -70,6 +70,8 @@ uint8_t rowPins[] = {28, 27, 26, 22, 21};
 uint8_t columnPins[] = {18, 17, 16, 19, 20};
 
 //Mappings for keypresses
+#define KEYS_NOTES_MASK   0x01ff8c00
+#define KEYS_QUALITY_MASK 0x000073e3
 #define KEY_C       0x00100000 
 #define KEY_Cs      0x00008000
 #define KEY_D       0x00200000
@@ -92,3 +94,31 @@ uint8_t columnPins[] = {18, 17, 16, 19, 20};
 #define KEY_DOM9    0x00000040
 #define KEY_DIM     0x00000001
 #define KEY_AUG     0x00000002
+
+//Mappings for LEDs
+//Note that the LED data is shifted out serially to 3x 8-bit shift registers LSB first. Lower LED numbers (in the schematic) are at MSBs.
+//data is shifted out in blocks of 32 bits. Lower 10 bits are unused.
+#define LED_C       0x80000000
+#define LED_Cs      0x40000000
+#define LED_D       0x20000000
+#define LED_Ds      0x10000000
+#define LED_E       0x08000000
+#define LED_F       0x04000000
+#define LED_Fs      0x02000000
+#define LED_G       0x01000000
+#define LED_Gs      0x00800000
+#define LED_A       0x00400000
+#define LED_As      0x00200000
+#define LED_B       0x00100000
+#define LED_MAJ     0x00080000
+#define LED_MAJ7    0x00040000
+#define LED_MAJ9    0x00020000
+#define LED_MIN     0x00010000
+#define LED_MIN7    0x00008000
+#define LED_MIN9    0x00004000
+#define LED_DOM7    0x00002000
+#define LED_DOM9    0x00001000
+#define LED_DIM     0x00000800
+#define LED_AUG     0x00000400
+
+#endif
