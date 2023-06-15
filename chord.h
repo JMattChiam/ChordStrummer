@@ -1,6 +1,9 @@
 #ifndef _CHORD_H
 #define _CHORD_H
 
+#define SR_CLOCK_PIN 9
+#define SR_LATCH_PIN 10
+#define SR_SERIAL_PIN 11
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
@@ -9,14 +12,15 @@
 #define MPR121_TOUCH_THRESHOLD 16
 #define MPR121_RELEASE_THRESHOLD 10 
 #define NOTE_DURATION 50
+#define KEYS_SCAN_INTERVAL 5
 
 //function declarations
 void gpio_initialise(void);
 void mpr121_initialise(void);
 void midi_task(void);
 void chord_select_task(void);
-void led_update_task(void);
-uint8_t getNote(int root, int string, int chordQuality);
+void update_leds();
+uint8_t getMIDINote(int root, int string, int chordQuality);
 
 //Chordnames
 enum ChordQuality {

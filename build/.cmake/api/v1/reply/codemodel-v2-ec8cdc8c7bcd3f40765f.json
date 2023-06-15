@@ -1031,7 +1031,7 @@
 					[
 						0
 					],
-					"name" : "test_project",
+					"name" : "chord_machine",
 					"targetIndexes" : 
 					[
 						3
@@ -1167,7 +1167,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "chord::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-chord-Debug-5457a3f631121cb3d954.json",
+					"jsonFile" : "target-chord-Debug-a224203a201980f2d3d6.json",
 					"name" : "chord",
 					"projectIndex" : 0
 				},

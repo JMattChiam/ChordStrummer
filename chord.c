@@ -8,14 +8,16 @@
 #include "bsp/board.h"
 #include "tusb.h"
 
-static uint8_t rootNote;
+static enum Notes rootNote;
 static enum ChordQuality chordQuality;
 static struct mpr121_sensor mpr121;
+
 static uint16_t plucked = 0x0000;
 static uint16_t previousTouch = 0x0000;
 static uint16_t currentTouch = 0x0000; 
 static uint32_t noteTimers [12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8_t previousNote [12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint32_t scanTimer = 0;
 
 int main() 
 {
@@ -23,20 +25,20 @@ int main()
     tusb_init();
     gpio_initialise();
 
+    // Initialise and autoconfigure the touch sensor.
     i2c_init(I2C_PORT, MPR121_I2C_FREQ);
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
-
-    // Initialise and autoconfigure the touch sensor.
     mpr121_init(I2C_PORT, MPR121_I2C_ADDR, &mpr121);
     mpr121_set_thresholds(MPR121_TOUCH_THRESHOLD,
                           MPR121_RELEASE_THRESHOLD, &mpr121);
 
 
+    
     chordQuality = MAJ;
-    rootNote = MIDINotes[0];
+    rootNote = C;
 
     while (1) 
     {
@@ -65,7 +67,7 @@ void midi_task()
         {
             if (((previousTouch >> electrode) & 1) == 0 && ((currentTouch >> electrode) & 1) == 1)
             {
-                note = getNote(rootNote, electrode, chordQuality);
+                note = getMIDINote(rootNote, electrode, chordQuality);
                 uint8_t note_on[3] = { 0x90 | channel, note, 127 };
                 tud_midi_stream_write(cable_num, note_on, 3);
                 noteTimers[electrode] = board_millis();
@@ -94,18 +96,70 @@ void midi_task()
     previousTouch = currentTouch;
 }
 
-//Returns the MIDI Note number to play
-uint8_t getNote(int root, int string, int chordQuality)
+//Returns the MIDI Note number to play according to root note and chord quality
+uint8_t getMIDINote(int root, int string, int chordQuality)
 {
-    uint8_t note;
-    note = root + chordVoicings[chordQuality][string] + 12;
-    return note;
+    uint8_t MIDInote;
+    MIDInote = MIDINotes[root] + chordVoicings[chordQuality][string] + 12;
+    return MIDInote;
+}
+
+void update_leds()
+{
+    uint32_t leds = 0x00000000;
+    uint8_t byteToShift = 0x00;
+    switch (rootNote)
+    {
+        case C  : leds = (leds | LED_C);
+        case Cs : leds = (leds | LED_Cs);
+        case D  : leds = (leds | LED_D);
+        case Ds : leds = (leds | LED_Ds);
+        case E  : leds = (leds | LED_E);
+        case F  : leds = (leds | LED_F);
+        case Fs : leds = (leds | LED_Fs);
+        case G  : leds = (leds | LED_G);
+        case Gs : leds = (leds | LED_Gs);
+        case A  : leds = (leds | LED_A);
+        case As : leds = (leds | LED_As);
+        case B  : leds = (leds | LED_B);
+        default : leds = leds;
+    }
+
+    switch (chordQuality)
+    {
+        case MAJ  : leds = (leds | LED_MAJ);
+        case MAJ7 : leds = (leds | LED_MAJ7);
+        case MAJ9 : leds = (leds | LED_MAJ9);
+        case MIN  : leds = (leds | LED_MIN);
+        case MIN7 : leds = (leds | LED_MIN7);
+        case MIN9 : leds = (leds | LED_MIN9);
+        case DOM7 : leds = (leds | LED_DOM7);
+        case DOM9 : leds = (leds | LED_DOM9);
+        case DIM  : leds = (leds | LED_DIM);
+        case AUG  : leds = (leds | LED_AUG);
+        default   : leds = leds;
+    }
+
+    /*
+    for (int i = 0; i < 4; i++)
+    {
+        byteToShift = byteToShift | (leds >> (i * 8));
+        //shift_register_write_bitmask(shift, byteToShift);
+        //shift_register_flush(shift);
+        byteToShift = 0x00;
+    }
+    */
 }
 
 //Scan keyboard matrix and identify the chord being selected
 //Bits 0 - 21 are the readings of the 22 keyswitches. Other bits are unused.
 void chord_select_task()
 {  
+    //Only scan keyswitches if scan interval has elapsed
+    if (board_millis() - scanTimer < KEYS_SCAN_INTERVAL) 
+        return;
+    scanTimer = board_millis();
+
     uint32_t keyState = 0x00000000;
     uint32_t noteKeypress = 0x00000000;
     uint32_t qualityKeypress = 0x00000000;
