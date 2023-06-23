@@ -4,20 +4,23 @@
 #include "pico/binary_info.h"
 #include "hardware/i2c.h"
 #include "mpr121.h"
+#include "74HC595.h"
 #include "chord.h"
 #include "bsp/board.h"
 #include "tusb.h"
 
+
 static enum Notes rootNote;
 static enum ChordQuality chordQuality;
 static struct mpr121_sensor mpr121;
-
+static struct ShiftRegister_74HC595 shift;
 static uint16_t plucked = 0x0000;
 static uint16_t previousTouch = 0x0000;
 static uint16_t currentTouch = 0x0000; 
 static uint32_t noteTimers [12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8_t previousNote [12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint32_t scanTimer = 0;
+static uint32_t mpr121ScanTimer = 0;
 
 int main() 
 {
@@ -35,8 +38,7 @@ int main()
     mpr121_set_thresholds(MPR121_TOUCH_THRESHOLD,
                           MPR121_RELEASE_THRESHOLD, &mpr121);
 
-
-    
+    ShiftRegister_74HC595_init(&shift, SR_SERIAL_PIN, SR_CLOCK_PIN, SR_LATCH_PIN);
     chordQuality = MAJ;
     rootNote = C;
 
@@ -62,11 +64,11 @@ void midi_task()
     //Figure out which "strings" have been played
     if (currentTouch > 0)
     {
-        gpio_put(25, 1);
         for (int electrode = 0; electrode < 12; electrode++)
         {
             if (((previousTouch >> electrode) & 1) == 0 && ((currentTouch >> electrode) & 1) == 1)
             {
+                gpio_put(25, 1);
                 note = getMIDINote(rootNote, electrode, chordQuality);
                 uint8_t note_on[3] = { 0x90 | channel, note, 127 };
                 tud_midi_stream_write(cable_num, note_on, 3);
@@ -81,7 +83,6 @@ void midi_task()
     {
         gpio_put(25, 0);
     }
-
     //Turn off notes after duration has elasped
     for (int i = 0; i < 12; i++)
     {
@@ -108,47 +109,16 @@ void update_leds()
 {
     uint32_t leds = 0x00000000;
     uint8_t byteToShift = 0x00;
-    switch (rootNote)
-    {
-        case C  : leds = (leds | LED_C);
-        case Cs : leds = (leds | LED_Cs);
-        case D  : leds = (leds | LED_D);
-        case Ds : leds = (leds | LED_Ds);
-        case E  : leds = (leds | LED_E);
-        case F  : leds = (leds | LED_F);
-        case Fs : leds = (leds | LED_Fs);
-        case G  : leds = (leds | LED_G);
-        case Gs : leds = (leds | LED_Gs);
-        case A  : leds = (leds | LED_A);
-        case As : leds = (leds | LED_As);
-        case B  : leds = (leds | LED_B);
-        default : leds = leds;
-    }
-
-    switch (chordQuality)
-    {
-        case MAJ  : leds = (leds | LED_MAJ);
-        case MAJ7 : leds = (leds | LED_MAJ7);
-        case MAJ9 : leds = (leds | LED_MAJ9);
-        case MIN  : leds = (leds | LED_MIN);
-        case MIN7 : leds = (leds | LED_MIN7);
-        case MIN9 : leds = (leds | LED_MIN9);
-        case DOM7 : leds = (leds | LED_DOM7);
-        case DOM9 : leds = (leds | LED_DOM9);
-        case DIM  : leds = (leds | LED_DIM);
-        case AUG  : leds = (leds | LED_AUG);
-        default   : leds = leds;
-    }
-
-    /*
+    leds = leds | ledNotesMappings[rootNote];
+    leds = leds | ledQualityMappings[chordQuality];
+    
     for (int i = 0; i < 4; i++)
     {
         byteToShift = byteToShift | (leds >> (i * 8));
-        //shift_register_write_bitmask(shift, byteToShift);
-        //shift_register_flush(shift);
+        shiftOutByte(&shift, byteToShift);
         byteToShift = 0x00;
     }
-    */
+    latchRegister(&shift);
 }
 
 //Scan keyboard matrix and identify the chord being selected
@@ -160,59 +130,53 @@ void chord_select_task()
         return;
     scanTimer = board_millis();
 
+    uint8_t columnState;
     uint32_t keyState = 0x00000000;
     uint32_t noteKeypress = 0x00000000;
     uint32_t qualityKeypress = 0x00000000;
-    uint8_t columnState;
 
-    //Turn on columns in order and read the rows
-    //Saved into keyState variable
-    //See chord.h for positions of each keyswitch
-    for (int i = 0; i < 5; i++)
+    for (int column = 0; column < 5; column++)
     {
+        //clear columns
         columnState = 0x00;
-        gpio_put(columnPins[i], 1);
-        for (int j = 0; j < 5; j++)
+        for(int k = 0; k < 5; k++)
         {
-            columnState = columnState | (gpio_get(rowPins[j]) << j);
+            gpio_put(columnPins[k], 0);
         }
-        keyState = (keyState << (i * 5)) | columnState;
+        
+        //pull one column high
+        gpio_put(columnPins[column], 1);
+        sleep_us(100); //Allow levels to settle before reading
+        {   
+            for (int j = 0; j < 5; j++)
+            {
+                columnState = columnState | (gpio_get(rowPins[j]) << j);
+            }
+            keyState = keyState | (columnState << (column*5));
+        }
     }
-
     noteKeypress = keyState & KEYS_NOTES_MASK;
     qualityKeypress = keyState & KEYS_QUALITY_MASK;
-    switch (noteKeypress)
-    {
-        case KEY_C  : rootNote = C;
-        case KEY_Cs : rootNote = Cs;
-        case KEY_D  : rootNote = D;
-        case KEY_Ds : rootNote = Ds; 
-        case KEY_E  : rootNote = E;
-        case KEY_F  : rootNote = F;
-        case KEY_Fs : rootNote = Fs;
-        case KEY_G  : rootNote = G;
-        case KEY_Gs : rootNote = Gs;
-        case KEY_A  : rootNote = A;
-        case KEY_As : rootNote = As;
-        case KEY_B  : rootNote = B;
-        default     : rootNote = rootNote;  //Do not change note if >1 note key pressed simultaneously
-    }
+    updateChord(noteKeypress, qualityKeypress);
+    update_leds();
+}
 
-    switch (qualityKeypress)
+void updateChord(uint32_t noteKeypress, uint32_t qualityKeypress)
+{
+    for (int i = 0; i < 12; i++)
     {
-        case KEY_MAJ  : chordQuality = MAJ;
-        case KEY_MIN  : chordQuality = MIN;
-        case KEY_MAJ7 : chordQuality = MAJ7;
-        case KEY_MIN7 : chordQuality = MIN7;
-        case KEY_MAJ9 : chordQuality = MAJ9;
-        case KEY_MIN9 : chordQuality = MIN9;
-        case KEY_DOM7 : chordQuality = DOM7;
-        case KEY_DOM9 : chordQuality = DOM9;
-        case KEY_DIM  : chordQuality = DIM;
-        case KEY_AUG  : chordQuality = AUG;
-        default       : chordQuality = chordQuality;    //Do not change quality if >1 quality key pressed simultaneously
+        if (noteKeypress == keyMappings[i])
+        {
+            rootNote = i;
+        }
     }
-    
+    for (int i = 0; i < 10; i++)
+    {
+        if (qualityKeypress == qualityMappings[i])
+        {
+            chordQuality = i;
+        }
+    }
 }
 
 void gpio_initialise()

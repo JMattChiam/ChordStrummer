@@ -3,10 +3,8 @@
 #include "74HC595.h"
 #include <stdlib.h>
 
-struct ShiftRegister_74HC595 * NewShiftRegister(int dataPin, int clockPin, int latchPin)
+void ShiftRegister_74HC595_init(struct ShiftRegister_74HC595* shift, int dataPin, int clockPin, int latchPin)
 {
-    struct ShiftRegister_74HC595 * shift = (struct ShiftRegister_74HC595 *) malloc(sizeof(struct ShiftRegister_74HC595));
-
     shift->serialData_pin = dataPin;
     shift->clock_pin = clockPin;
     shift->latch_pin = latchPin;
@@ -17,8 +15,6 @@ struct ShiftRegister_74HC595 * NewShiftRegister(int dataPin, int clockPin, int l
     gpio_set_dir(dataPin, GPIO_OUT);
     gpio_set_dir(clockPin, GPIO_OUT);
     gpio_set_dir(latchPin, GPIO_OUT);
-
-    return shift;
 }
 
 void clock_signal(int clockPin)
@@ -32,7 +28,7 @@ void clock_signal(int clockPin)
 void latchRegister(struct ShiftRegister_74HC595* shift)
 {
     gpio_put(shift->latch_pin, 1);
-    sleep_us(LATCH_HOLD_INTERVAL);
+    sleep_us(LATCH_INTERVAL);
     gpio_put(shift->latch_pin, 0);
 }
 
