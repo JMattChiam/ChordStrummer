@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "mpr121.h": "c",
+        "gpio.h": "c",
+        "binary_info.h": "c",
+        "rp2040_shift_register.h": "c",
+        "math.h": "c",
+        "i2c.h": "c"
+    }
+}
