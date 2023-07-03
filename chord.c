@@ -83,6 +83,7 @@ void midi_task()
                 note = get_MIDI_note(rootNote, electrode, chordQuality);
                 uint8_t note_on[3] = { 0x90 | channel, note, 127 };
                 tud_midi_stream_write(cable_num, note_on, 3);
+                send_MIDI_UART(1, note, 127);
                 noteTimers[electrode] = board_millis();
                 previousNote[electrode] = note;
 
