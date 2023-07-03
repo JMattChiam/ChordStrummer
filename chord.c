@@ -38,7 +38,18 @@ int main()
     mpr121_set_thresholds(MPR121_TOUCH_THRESHOLD,
                           MPR121_RELEASE_THRESHOLD, &mpr121);
 
+    //Initialise shift registers
     ShiftRegister_74HC595_init(&shift, SR_SERIAL_PIN, SR_CLOCK_PIN, SR_LATCH_PIN);
+
+    //Initiatialise UART MIDI
+    uart_init(UART_ID, BAUD_RATE);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    uart_set_fifo_enabled(UART_ID, true);
+    uart_set_translate_crlf(UART_ID, false);
+    uart_set_hw_flow(UART_ID, false, false);
+    uart_set_format(UART_ID, UART_DATA_BITS, UART_STOP_BITS, UART_PARITY);
+
+
     chordQuality = MAJ;
     rootNote = C;
 
@@ -69,7 +80,7 @@ void midi_task()
             if (((previousTouch >> electrode) & 1) == 0 && ((currentTouch >> electrode) & 1) == 1)
             {
                 gpio_put(25, 1);
-                note = getMIDINote(rootNote, electrode, chordQuality);
+                note = get_MIDI_note(rootNote, electrode, chordQuality);
                 uint8_t note_on[3] = { 0x90 | channel, note, 127 };
                 tud_midi_stream_write(cable_num, note_on, 3);
                 noteTimers[electrode] = board_millis();
@@ -98,7 +109,7 @@ void midi_task()
 }
 
 //Returns the MIDI Note number to play according to root note and chord quality
-uint8_t getMIDINote(int root, int string, int chordQuality)
+uint8_t get_MIDI_note(int root, int string, int chordQuality)
 {
     uint8_t MIDInote;
     MIDInote = MIDINotes[root] + chordVoicings[chordQuality][string] + 12;
@@ -157,11 +168,11 @@ void chord_select_task()
     }
     noteKeypress = keyState & KEYS_NOTES_MASK;
     qualityKeypress = keyState & KEYS_QUALITY_MASK;
-    updateChord(noteKeypress, qualityKeypress);
+    update_chord(noteKeypress, qualityKeypress);
     update_leds();
 }
 
-void updateChord(uint32_t noteKeypress, uint32_t qualityKeypress)
+void update_chord(uint32_t noteKeypress, uint32_t qualityKeypress)
 {
     for (int i = 0; i < 12; i++)
     {
@@ -177,6 +188,25 @@ void updateChord(uint32_t noteKeypress, uint32_t qualityKeypress)
             chordQuality = i;
         }
     }
+}
+
+//Send Note-on message
+void send_MIDI_UART(int channel, int note, int velocity)
+{
+    unsigned char statusByte = 0x91; //Note-on, channel 1
+    unsigned char dataByte1 = (unsigned char) note;
+    unsigned char dataByte2 = (unsigned char) MIDI_UART_VELOCITY;
+    send_UART_byte(statusByte);
+    send_UART_byte(dataByte1);
+    send_UART_byte(dataByte2);
+}
+
+//Blocking UART transmission
+void send_UART_byte(unsigned char byteToSend)
+{
+    while (!uart_is_writable(UART_ID)) {}
+	uart_putc(UART_ID, byteToSend);
+	return;
 }
 
 void gpio_initialise()
