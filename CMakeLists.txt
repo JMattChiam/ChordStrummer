@@ -23,6 +23,7 @@ target_include_directories(chord PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(chord PRIVATE 
   pico_stdlib 
   pico-mpr121
+  hardware_uart
   hardware_i2c
   tinyusb_device 
   tinyusb_board

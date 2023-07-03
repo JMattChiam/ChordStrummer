@@ -3,6 +3,15 @@
 
 #include <stdint.h>
 
+#define UART_ID uart0
+#define BAUD_RATE 31250
+#define UART_TX_PIN 12
+#define UART_RX_PIN 13
+#define UART_START_BITS 1
+#define UART_STOP_BITS 1
+#define UART_DATA_BITS 8
+#define UART_PARITY UART_PARITY_NONE
+#define MIDI_UART_VELOCITY 68
 #define SR_CLOCK_PIN 9
 #define SR_LATCH_PIN 10
 #define SR_SERIAL_PIN 11
@@ -22,9 +31,11 @@ void gpio_initialise(void);
 void mpr121_initialise(void);
 void midi_task(void);
 void chord_select_task(void);
-void updateChord(uint32_t noteKeypress, uint32_t qualityKeypress);
-void update_leds();
-uint8_t getMIDINote(int root, int string, int chordQuality);
+void update_chord(uint32_t noteKeypress, uint32_t qualityKeypress);
+void update_leds(void);
+void send_UART_byte(unsigned char byteToSend);
+void send_MIDI_UART(int channel, int note, int velocity);
+uint8_t get_MIDI_note(int root, int string, int chordQuality);
 
 //Chordnames
 enum ChordQuality {
